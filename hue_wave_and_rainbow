@@ -1,0 +1,277 @@
+import asyncio
+import threading
+import time
+from phue import Bridge
+import tkinter as tk
+import colorsys
+import phue
+
+root = tk.Tk()
+root.title("Philips Hue Light Control")
+root.geometry("400x400")
+
+b = Bridge('192.168.0.88')
+b.connect()
+
+rooms = {
+    "Stue": [13, 12, 16, 18, 4, 5, 10, 11, 14],
+    "Kjøkken": [8, 17, 19, 20, 9],
+    "Trapp": [15, 14]
+}
+
+b.set_group(rooms["Stue"], 'on', True)
+
+def toggle_lights(room, on_or_off):
+    b.set_group(room, 'on', on_or_off)
+
+# Create buttons for turning on/off each room
+for room in rooms:
+    on_button = tk.Button(root, text=f"{room} On", command=lambda room=room: toggle_lights(room, True))
+    off_button = tk.Button(root, text=f"{room} Off", command=lambda room=room: toggle_lights(room, False))
+    on_button.pack()
+    off_button.pack()
+
+# Create a slider for controlling brightness
+brightness_slider = tk.Scale(root, from_=0, to=255, orient="horizontal")
+brightness_slider.pack()
+
+should_stop = False
+lock = threading.Lock()
+
+async def cycle_rainbow_colors():
+    global should_stop
+    while True:
+        with lock:
+            if should_stop:
+                break
+        for hue in range(0, 65535, 5000):
+            color = [int(x*255) for x in colorsys.hsv_to_rgb(hue/65535, 1, 1)]
+            brightness = brightness_slider.get()
+            for room in rooms:
+                for light_id in rooms[room]:
+                    light = b.get_light(light_id)
+                    if light['state']['on']:
+                        b.set_light(light_id, {'hue': hue, 'bri': brightness, 'sat': 255})
+            await asyncio.sleep(0.5)
+
+def start_rainbow_colors():
+    asyncio.run(cycle_rainbow_colors())
+
+def run_in_thread(target):
+    thread = threading.Thread(target=target)
+    thread.start()
+
+rainbow_button = tk.Button(root, text="Rainbow", command=lambda: run_in_thread(start_rainbow_colors))
+rainbow_button.pack()
+
+def stop_function():
+    global should_stop
+    should_stop = True
+
+stop_rainbow_button = tk.Button(root, text="Stop", command=stop_function)
+stop_rainbow_button.pack()
+
+import random
+
+def wave_colors(direction=1):
+    rooms = [
+        [13],
+        [12, 4],
+        [16, 5, 24],
+        [14, 23, 18], 
+        [8, 10, 21, 11],
+        [17, 7, 22, 6],
+        [15, 20, 19],
+        [9]
+    ]
+
+    # Define a list of colors to cycle through
+    colors = [
+        (0, 255, 0), # green
+        (255, 165, 0), # orange
+        (255, 0, 0), # red
+        (0, 0, 255), # blue
+    ]
+
+    # Convert RGB colors to HSL
+    hsl_colors = [(r/255, g/255, b/255) for r, g, b in colors]
+
+    # Calculate the hue step size based on the number of colors and the number of rows
+    hue_step = 1 / (len(hsl_colors) * len(rooms))
+
+    # Keep track of the current hue
+    current_hue = 0
+
+    # Start the wave loop
+    while True:
+        global should_stop
+        for row_index, row in enumerate(rooms[::direction]):
+            if should_stop:
+                break
+            for light_id in row:
+                # Calculate the hue for this light based on the current hue and the row index
+                hue = current_hue + row_index * hue_step
+
+                # Convert the hue to an RGB color
+                rgb = colorsys.hsv_to_rgb(hue % 1, 1, 1)
+                bri = brightness_slider.get()
+
+                # Set the light color
+                hue_value = int(hue * 65535)
+                if hue_value > 65535:
+                    hue_value = hue_value % 65535
+                b.set_light(light_id, {'hue': hue_value, 'bri': bri, 'sat': 255})
+            
+            # Wait for the appropriate amount of time based on the speed adjuster value
+            time.sleep(speed_slider.get() / 1000)
+
+        # Increment the current hue
+        current_hue += hue_step
+        # Wait for a short period before starting the next iteration
+        time.sleep(speed_slider.get() / 1000)
+
+
+speed_slider = tk.Scale(root, from_=1, to=1000, orient="horizontal", label="Speed")
+speed_slider.pack()
+
+wave_colors_button = tk.Button(root, text="Wave Colors", command=lambda: run_in_thread(lambda: wave_colors(1)))
+wave_colors_button.pack()
+
+inverted_wave_colors_button = tk.Button(root, text="Inverted Wave Colors", command=lambda: run_in_thread(lambda: wave_colors(-1)))
+inverted_wave_colors_button.pack()
+
+
+root.mainloop()
+
+
+
+
+
+
+
+
+# def wave_colors():
+#     rooms = [
+#         [13],
+#         [12, 4],
+#         [16, 5, 24],
+#         [14, 23, 18], 
+#         [8, 10, 21, 11],
+#         [17, 7, 22, 6],
+#         [15, 20, 19],
+#         [9]
+#     ]
+
+#     # Define a list of colors to cycle through
+#     colors = [
+#         (0, 255, 0), # green
+#         (255, 165, 0), # orange
+#         (255, 0, 0), # red
+#         (0, 0, 255), # blue
+#     ]
+
+#     # Convert RGB colors to HSL
+#     hsl_colors = [(r/255, g/255, b/255) for r, g, b in colors]
+
+#     # Calculate the hue step size based on the number of colors and the number of rows
+#     hue_step = 1 / (len(hsl_colors) * len(rooms))
+
+#     # Keep track of the current hue
+#     current_hue = 0
+
+#     # Start the wave loop
+#     while True:
+#         global should_stop
+#         for row_index, row in enumerate(rooms):
+#             if should_stop:
+#                 break
+#             for light_id in row:
+#                 # Calculate the hue for this light based on the current hue and the row index
+#                 hue = current_hue + row_index * hue_step
+
+#                 # Convert the hue to an RGB color
+#                 rgb = colorsys.hsv_to_rgb(hue % 1, 1, 1)
+#                 bri = brightness_slider.get()
+
+#                 # Set the light color
+#                 hue_value = int(hue * 65535)
+#                 if hue_value > 65535:
+#                     hue_value = hue_value % 65535
+#                 b.set_light(light_id, {'hue': hue_value, 'bri': bri, 'sat': 255})
+
+#         # Increment the current hue
+#         current_hue += hue_step
+
+#         # Randomly skip one of the next two colors
+#         if random.random() < 0.5:
+#             current_hue += hue_step
+
+#         # Wait for a short period before starting the next iteration
+#         time.sleep(0.1)
+
+
+# wave_colors_button = tk.Button(root, text="Wave Colors", command=lambda: run_in_thread(wave_colors))
+# wave_colors_button.pack()
+
+# root.mainloop()
+
+# def wave_colors():
+#     rooms = [
+#         [13],
+#         [12, 4],
+#         [16, 5, 24],
+#         [14, 23, 18], 
+#         [8, 10, 21, 11],
+#         [17, 7, 22, 6],
+#         [15, 20, 19],
+#         [9]
+#     ]
+
+#     # Define a list of colors to cycle through
+#     colors = [
+#         (0, 255, 0), # green
+#         (255, 165, 0), # orange
+#         (255, 0, 0), # red
+#         (0, 0, 255), # blue
+#     ]
+
+#     # Convert RGB colors to HSL
+#     hsl_colors = [(r/255, g/255, b/255) for r, g, b in colors]
+
+#     # Calculate the hue step size based on the number of colors and the number of rows
+#     hue_step = 1 / (len(hsl_colors) * len(rooms))
+
+#     # Keep track of the current hue
+#     current_hue = 0
+
+#     # Start the wave loop
+#     while True:
+#         global should_stop
+#         for row_index, row in enumerate(rooms):
+#             if should_stop:
+#                 break
+#             for light_id in row:
+#                 # Calculate the hue for this light based on the current hue and the row index
+#                 hue = current_hue + row_index * hue_step
+
+#                 # Convert the hue to an RGB color
+#                 rgb = colorsys.hsv_to_rgb(hue % 1, 1, 1)
+#                 bri = brightness_slider.get()
+
+#                 # Set the light color
+#                 hue_value = int(hue * 65535)
+#                 if hue_value > 65535:
+#                     hue_value = hue_value % 65535
+#                 b.set_light(light_id, {'hue': hue_value, 'bri': bri, 'sat': 255})
+
+#         # Increment the current hue
+#         current_hue += hue_step
+
+#         # Wait for a short period before starting the next iteration
+#         time.sleep(0.1)
+
+# wave_colors_button = tk.Button(root, text="Wave Colors", command=lambda: run_in_thread(wave_colors))
+# wave_colors_button.pack()
+   
+   
+# root.mainloop()
